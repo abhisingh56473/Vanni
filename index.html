@@ -1,0 +1,2051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Vaani AI Chat</title>
+    <style>
+        /* Basic Reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Variables for dynamic height on mobile */
+        :root {
+            --app-height: 100dvh; /* Dynamic viewport height, ideal for mobile */
+            /* Fallback for browsers not supporting dvh */
+            height: 100vh; 
+            height: 100%; /* For older browsers */
+        }
+
+        /* Body and Background */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000; /* Dark background as in the image */
+            color: #ffffff;
+            height: 100dvh; /* Use dynamic viewport height */
+            height: var(--app-height); /* Use JS calculated height for better keyboard handling */
+            overflow: hidden; /* Prevent body scroll, app will manage its own scroll */
+            display: flex; /* Ensure app fills screen */
+            justify-content: center; /* Center content horizontally */
+            align-items: center; /* Center content vertically */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        }
+
+        .app {
+            display: flex;
+            height: 100%; /* Initially 100% of body's height */
+            height: var(--app-height); /* Use JS calculated height */
+            width: 100%;
+            max-width: 900px; /* Limit overall width for a cleaner look on large screens */
+            background: #000; /* Main app background */
+            /* box-shadow and border-radius will be applied in media query for desktop */
+            position: relative; /* Important for absolute positioning of auth section */
+        }
+
+        /* Sidebar (Hidden by default for mobile-first approach) */
+        .sidebar {
+            display: flex; 
+            width: 260px;
+            background: #1e1f20; /* Darker sidebar background */
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            flex-shrink: 0; /* Don't shrink sidebar */
+            position: fixed; /* For mobile toggle */
+            left: 0; 
+            top: 0;
+            height: 100dvh; /* Use dynamic viewport height for sidebar */
+            height: var(--app-height);
+            z-index: 100;
+            transform: translateX(-100%); /* Initially off-screen to the left */
+        }
+
+        .sidebar.open {
+            transform: translateX(0); /* Move on-screen */
+        }
+
+        /* Overlay for when sidebar is open */
+        .overlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100dvh; /* Use dynamic viewport height */
+            height: var(--app-height);
+            background: rgba(0, 0, 0, 0.5); /* Semi-transparent black */
+            z-index: 90; /* Below sidebar, above main content */
+        }
+        .overlay.active {
+            display: block;
+        }
+
+        .sidebar-header {
+            padding: 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            flex-shrink: 0; /* Prevent header from shrinking */
+        }
+
+        .new-chat-btn {
+            background: #2a2b2e; /* Darker button for sidebar */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 6px; /* Slightly less rounded */
+            cursor: pointer;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .new-chat-btn:hover {
+            background: #3a3b3e;
+        }
+
+        /* Search Bar in Sidebar */
+        .sidebar-search-container {
+            padding: 10px 18px 0; /* Adjust padding for search input */
+            flex-shrink: 0; /* Prevent search from shrinking */
+        }
+        .sidebar-search-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            background: #2a2b2e;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+        .sidebar-search-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        .sidebar-search-input:focus {
+            border-color: #667eea;
+        }
+
+
+        .chat-history {
+            flex: 1; /* Allows history to take available space */
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .chat-item {
+            padding: 12px 16px;
+            margin: 2px 0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: flex; /* To align text and icons */
+            align-items: center;
+            justify-content: space-between; /* Space between title and icons */
+            position: relative; /* For the edit input */
+        }
+
+        .chat-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .chat-item.active {
+            background: #3e3f42; /* Active chat item background */
+        }
+
+        .chat-item-title {
+            flex-grow: 1; /* Allows title to take available space */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-right: 8px; /* Space before icons */
+        }
+
+        .chat-item-actions {
+            display: flex;
+            gap: 4px; /* Space between action buttons */
+            opacity: 0; /* Hidden by default */
+            transition: opacity 0.2s ease;
+        }
+
+        .chat-item:hover .chat-item-actions {
+            opacity: 1; /* Show on hover */
+        }
+
+        /* Always show actions on desktop */
+        @media (min-width: 769px) {
+            .chat-item-actions {
+                opacity: 1; 
+            }
+        }
+
+        .chat-item-actions button {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+        }
+
+        .chat-item-actions button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .chat-item-actions button svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        /* Edit Input for Chat Item */
+        .chat-item-edit-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #2a2b2e;
+            border: 1px solid #667eea;
+            color: #fff;
+            padding: 0 12px;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 14px;
+            outline: none;
+            display: none; /* Hidden by default */
+        }
+
+        .sidebar-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 18px;
+            flex-shrink: 0; /* Prevent footer from shrinking */
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            justify-content: space-between; /* To push logout to right */
+        }
+
+        .user-menu:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #8e8e93; /* Gray avatar */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            flex-shrink: 0; /* Prevent avatar from shrinking */
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-grow: 1;
+        }
+
+        /* Logout button in sidebar */
+        .logout-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        /* Main Content */  
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative; /* Crucial for input-area absolute positioning */
+            background: #000; /* Main content background as in image */
+            min-width: 0; /* Allow content to shrink */
+        }
+
+        /* Chat Container - holds welcome screen and messages */
+        .chat-container {
+            flex: 1; /* Takes all available space above input */
+            overflow-y: hidden; /* Only messages div will scroll */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; /* Pushes content to bottom when little messages */
+            position: relative; /* For typing indicator absolute positioning */
+            min-height: 0; /* Allows shrinking in flex container */
+        }
+
+        .welcome-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1; /* Take available space */
+            text-align: center;
+            padding: 20px;
+            /* No bottom padding here, input area is separate */
+            overflow-y: auto; /* In case content is too tall */
+        }
+
+        .welcome-title {
+            font-size: 32px; /* Smaller title as in image */
+            font-weight: 600;
+            margin-bottom: 24px; /* More space */
+            color: #fff;
+            opacity: 0.9;
+        }
+
+        .welcome-options {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping for smaller screens */
+            justify-content: center;
+            gap: 12px; /* Space between buttons */
+            max-width: 600px; /* Limit width of buttons area */
+            margin: 0 auto;
+        }
+
+        .option-button {
+            background: #2a2b2e;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: background 0.2s ease, transform 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 150px; /* Ensure some minimum width */
+            justify-content: center;
+        }
+
+        .option-button:hover {
+            background: #3e3f42;
+            transform: translateY(-2px);
+        }
+
+        .option-button svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor; /* Inherit color from parent */
+        }
+
+        .messages {
+            flex: 1; /* Take up available space */
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px; /* Keep padding here for message content */
+            /* IMPORTANT FIX: Adjust padding-bottom dynamically in JS */
+            overflow-y: scroll; /* Ensure scrollbar appears */
+            padding-bottom: 90px; /* NEW: Initial padding-bottom to ensure space for input area */
+            /* This will be adjusted by JS based on input height */
+        }
+
+        .message {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            /* REMOVED: Blinking fix - no animation here */
+            /* animation: fadeIn 0.5s ease-out; */ 
+        }
+
+        /* @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        } */
+
+        .message.user {
+            justify-content: flex-end; /* Align user messages to the right */
+            text-align: right; /* Text aligns right */
+        }
+
+        .message.assistant {
+            justify-content: flex-start; /* Align assistant messages to the left */
+            background: #1e1f20; /* Assistant message background */
+            padding: 16px 20px;
+            border-radius: 12px; /* Rounded corners for assistant bubble */
+            margin-left: -20px; /* Extend background to edge of container for full width */
+            margin-right: -20px;
+        }
+
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .message.user .message-avatar {
+            order: 2; /* Put avatar on the right for user */
+            background: #667eea; /* User avatar color */
+        }
+
+        .message.assistant .message-avatar {
+            background: #764ba2; /* AI avatar color */
+        }
+
+        .message-content {
+            flex: 1;
+            line-height: 1.6;
+            max-width: calc(100% - 48px); /* Max width for content to prevent overflow */
+            word-wrap: break-word; /* Ensure long words break */
+        }
+
+        .message.user .message-content {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .message.assistant .message-content {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Input Area - Positioned absolutely at the bottom of main-content */  
+        .input-area {
+            padding: 10px 16px; /* Adjusted padding */
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: #000; /* Match body background */
+            position: absolute; /* Changed to absolute for reliable positioning */
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10; /* Ensure it's above messages */
+            box-sizing: border-box; /* Include padding in width calculation */
+            flex-shrink: 0; /* Prevent it from shrinking */
+        }
+
+        .input-container {
+            max-width: 700px; /* Input area can be slightly wider than chat messages */
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .input-wrapper {
+            background: #2a2b2e; /* Input background as in image */
+            border-radius: 20px; /* More rounded as in image */
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: flex-end;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #667eea; /* Focus border color */
+            box-shadow: 0 4px 20px rgba(102, 126, 234, 0.2);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            padding: 12px 16px; /* Adjust padding */
+            font-size: 16px;
+            resize: none;
+            outline: none;
+            max-height: 120px;
+            min-height: 24px;
+            font-family: inherit;
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .send-button {
+            background: #667eea; /* Send button background */
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 16px; /* Rounded as in image */
+            margin: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .send-button:disabled {
+            background: rgba(255, 255, 255, 0.2);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .send-button svg {
+            width: 20px; /* Larger send icon */
+            height: 20px;
+        }
+
+        /* New Image/Add button style */
+        .image-add-button {
+            background: transparent; /* No background, just icon */
+            border: none;
+            color: rgba(255, 255, 255, 0.7); /* Lighter color */
+            width: 40px;
+            height: 40px;
+            border-radius: 16px;
+            margin: 8px 4px 8px 8px; /* Adjust margin to be closer to input */
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .image-add-button:hover {
+            color: rgba(255, 255, 255, 0.9); /* Brighter on hover */
+            transform: translateY(-1px);
+        }
+
+        .image-add-button svg {
+            width: 24px; /* Larger plus icon */
+            height: 24px;
+            stroke: currentColor; /* Use stroke for plus icon */
+            stroke-width: 2;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Mic button style */
+        .mic-button { /* Renamed for clarity */
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            width: 40px;
+            height: 40px;
+            border-radius: 16px;
+            margin: 8px; /* Adjust margin to be consistent */
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            /* display: none; */ /* Initially hidden, controlled by JS */
+        }
+        .mic-button:hover {
+            color: rgba(255, 255, 255, 0.9);
+            transform: translateY(-1px);
+        }
+        .mic-button svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start; /* Align left with assistant messages */
+            gap: 5px;
+            padding: 10px 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-style: italic;
+            position: absolute; /* Position relative to chat-container */
+            /* Adjusted position to be above input area */
+            bottom: 0; /* This will be overridden by JS for keyboard */
+            left: 50%;
+            transform: translateX(-50%);
+            max-width: 800px;
+            width: calc(100% - 40px); /* Adjust width */
+            background: #1e1f20; /* Match assistant message bubble */
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: none; /* Initially hidden */
+            box-sizing: border-box; /* Crucial for calc(100% - 40px) to work correctly */
+        }
+        .typing-indicator .dot {
+            width: 8px;
+            height: 8px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            opacity: 0;
+            animation: dot-blink 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator .dot:nth-child(1) { animation-delay: 0s; }
+        .typing-indicator .dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dot-blink {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+        }
+
+        /* Mobile Header */
+        .mobile-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px; /* Smaller padding */
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background: #000; /* Match main background */
+            flex-shrink: 0;
+            justify-content: space-between; /* Space out items */
+            position: relative; /* For positioning user ID */
+        }
+
+        .mobile-header .left-menu-btn {
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-size: 24px; /* Larger icon */
+            cursor: pointer;
+            padding: 4px; /* Smaller padding for icon */
+        }
+
+        /* NEW: Get Plus button position */
+        .mobile-header .get-plus-btn {
+            background: #4a148c; /* Purple as in image */
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px; /* Pill shape */
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            position: absolute; /* Position absolutely to center */
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* NEW: User DP (avatar) in top right */
+        .mobile-header .user-dp-display { /* Renamed from user-id-display */
+            width: 32px; /* Same size as other avatars */
+            height: 32px;
+            border-radius: 50%;
+            background: #667eea; /* User avatar color */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .mobile-header .user-dp-display:hover {
+            transform: scale(1.05); /* Slight scale on hover */
+        }
+
+
+        /* Media Queries for Responsiveness */
+        @media (min-width: 769px) {
+            .mobile-header {
+                display: none; /* Hide mobile header on desktop */
+            }
+            .sidebar {
+                display: flex; /* Show sidebar on larger screens */
+                position: static; /* No longer fixed for desktop */
+                transform: translateX(0); /* Always visible */
+                height: 100%; /* Take full height of app */
+            }
+            .app {
+                 box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); /* Re-enable shadow for app container on desktop */
+                 border-radius: 12px; /* Rounded corners for the entire app on desktop */
+                 overflow: hidden; /* Hide overflow for rounded corners */
+                 max-height: 95vh; /* Limit app height on larger screens */
+            }
+            body {
+                padding: 20px; /* Add some padding around the app on desktop */
+                height: 100vh; /* Reset to 100vh for desktop */
+                height: 100%;
+            }
+            .overlay {
+                display: none !important; /* Hide overlay on desktop */
+            }
+            .chat-item-actions {
+                opacity: 1; /* Always show edit/delete on desktop */
+            }
+            /* On desktop, input-area is at the bottom of main-content, chat-container fills the rest */
+            .input-area {
+                position: relative; /* Revert to relative for desktop */
+                bottom: auto;
+            }
+            /* Typing indicator position for desktop (relative to chat-container's bottom) */
+            .typing-indicator {
+                bottom: 10px; 
+                transform: translateX(-50%) translateY(-100%); /* Adjust for bottom alignment */
+                padding: 8px 15px; 
+                font-size: 13px;
+                white-space: nowrap; 
+            }
+            /* NEW: Adjust messages padding for desktop */
+            .messages {
+                padding-bottom: 20px; /* Reset to original padding on desktop */
+            }
+        }
+
+        /* Confirmation Dialog */
+        .confirmation-dialog {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2a2b2e;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            z-index: 200; /* Above everything else */
+            text-align: center;
+            max-width: 300px;
+        }
+        .confirmation-dialog p {
+            margin-bottom: 20px;
+            font-size: 16px;
+            color: #fff;
+        }
+        .confirmation-dialog-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        .confirmation-dialog button {
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        .confirmation-dialog button.yes {
+            background: #dc3545; /* Red for delete */
+            color: white;
+            border: none;
+        }
+        .confirmation-dialog button.yes:hover {
+            background: #c82333;
+        }
+        .confirmation-dialog button.cancel {
+            background: #6c757d; /* Gray for cancel */
+            color: white;
+            border: none;
+        }
+        .confirmation-dialog button.cancel:hover {
+            background: #5a6268;
+        }
+
+        /* --- Auth Section Styles --- */
+        #auth-section {
+            display: flex; /* Hidden by default, shown by JS */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%; /* Take full height of its parent (.app) */
+            background: #000;
+            padding: 20px;
+            text-align: center;
+            position: absolute; /* Positioned relative to .app */
+            top: 0;
+            left: 0;
+            z-index: 200; /* Ensure it's on top of everything */
+        }
+
+        #auth-section h2 {
+            font-size: 28px;
+            margin-bottom: 30px;
+            color: #fff;
+        }
+
+        .auth-form {
+            background: #1e1f20;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .auth-form input[type="email"],
+        .auth-form input[type="password"],
+        .auth-form button {
+            width: calc(100% - 20px);
+            padding: 12px 10px;
+            margin-bottom: 15px;
+            border: 1px solid #3a3b3e;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .auth-form input[type="email"],
+        .auth-form input[type="password"] {
+            background: #2a2b2e;
+            color: #fff;
+            outline: none;
+        }
+        .auth-form input[type="email"]::placeholder,
+        .auth-form input[type="password"]::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .auth-form button {
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .auth-form button:hover {
+            background: #764ba2;
+        }
+
+        .toggle-auth-mode {
+            background: none;
+            border: none;
+            color: #667eea;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            text-decoration: underline;
+        }
+        .toggle-auth-mode:hover {
+            color: #764ba2;
+        }
+
+        /* NEW: Google login button style */
+        .google-login-button {
+            background: #4285F4; /* Google blue */
+            color: white;
+            width: calc(100% - 20px); /* Match other inputs */
+            padding: 12px 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px; /* Add some space above it */
+            margin-bottom: 15px; /* Add some space below it */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: background 0.2s ease;
+        }
+        .google-login-button:hover {
+            background: #357ae8; /* Darker blue on hover */
+        }
+        .google-icon {
+            width: 20px;
+            height: 20px;
+            /* background-color: white; */ /* Remove white background, let the img itself be visible */
+            /* padding: 2px; */ /* Remove padding, icon should look fine as is */
+            border-radius: 2px;
+        }
+        /* END NEW */
+
+        .forgot-password-button {
+            background: none;
+            border: none;
+            color: #667eea;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 5px;
+            text-decoration: underline;
+        }
+        .forgot-password-button:hover {
+            color: #764ba2;
+        }
+        .auth-status {
+            margin-top: 20px;
+            color: red;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        /* Password visibility container */
+        .password-container {
+            position: relative;
+            margin-bottom: 15px; /* Adjust as needed */
+            width: 100%;
+        }
+        .password-container input {
+            padding-right: 40px !important; /* Space for eye icon */
+            margin-bottom: 0 !important; /* Override default input margin */
+        }
+        .toggle-password {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9em;
+            user-select: none;
+        }
+        .toggle-password:hover {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        /* Scrollbar */  
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div id="auth-section">
+        <h2>Welcome to Vaani AI Chat</h2>
+        <div class="auth-form">
+            <h3 id="auth-form-title">Login</h3>
+            <input type="email" id="auth-email" placeholder="Email">
+            <div class="password-container">
+                <input type="password" id="auth-password" placeholder="Password">
+                <span class="toggle-password" data-target="auth-password">Show</span>
+            </div>
+            
+            <button id="auth-submit-button">Login</button>
+            <button id="forgot-password-btn" class="forgot-password-button">Forgot Password?</button>
+
+            <button id="google-auth-button" class="google-login-button">
+                <img src="https://img.icons8.com/color/16/000000/google-logo.png" alt="Google icon" class="google-icon">
+                Sign In with Google
+            </button>
+            <button class="toggle-auth-mode" id="toggle-auth-mode">Don't have an account? Sign Up</button>
+            <p id="auth-feedback" class="auth-status"></p>
+        </div>
+    </div>
+
+    <div class="app" id="chat-app-container" style="display: none;">
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="new-chat-btn" onclick="startNewChat()">
+                    <span>+</span>
+                    New chat
+                </button>
+            </div>
+            
+            <div class="sidebar-search-container">
+                <input type="text" id="chatSearchInput" class="sidebar-search-input" placeholder="Search chats...">
+            </div>
+              
+            <div class="chat-history" id="chatHistory">
+                </div>
+              
+            <div class="sidebar-footer">
+                <div class="user-menu">
+                    <div class="user-info">
+                        <div class="avatar" id="user-avatar-sidebar">U</div> <span id="user-display-name-sidebar">Guest</span> </div>
+                    <button class="logout-btn" id="logout-button">Logout</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="overlay" id="sidebarOverlay"></div>
+        <div class="overlay" id="dialogOverlay"></div>
+
+        <div class="confirmation-dialog" id="deleteConfirmationDialog">
+            <p>Are you sure you want to delete this chat?</p>
+            <div class="confirmation-dialog-buttons">
+                <button class="yes" id="confirmDeleteYes">Yes</button>
+                <button class="cancel" id="confirmDeleteCancel">Cancel</button>
+            </div>
+        </div>
+  
+        <div class="main-content">
+            <div class="mobile-header">
+                <button class="left-menu-btn" onclick="toggleSidebar()">☰</button>
+                <button class="get-plus-btn" onclick="showGetPlusMessage()">
+                    Get Plus <span style="font-size: 18px; margin-left: 5px;">+</span>
+                </button>
+                <div class="user-dp-display" id="mobile-user-dp-display" onclick="showUserInfo()">U</div>
+            </div>
+  
+            <div class="chat-container" id="chatContainer">
+                <div class="welcome-screen" id="welcomeScreen">
+                    <div class="welcome-title">What can I help with?</div>
+                    <div class="welcome-options">
+                        <button class="option-button" onclick="sendExample('Create image of a cyberpunk city')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 15V19C21 19.5523 20.5523 20 20 20H4C3.44772 20 3 19.5523 3 19V5C3 4.44772 3.44772 4 4 4H10M21 15L15 9V15L21 9M15 9L21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Create image
+                        </button>
+                        <button class="option-button" onclick="sendExample('Analyze data in this dataset')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.000/svg">
+                                <path d="M3 3H21V21H3V3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M9 18V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M15 18V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 18V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M7 21L17 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M21 7L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Analyze data
+                        </button>
+                        <button class="option-button" onclick="sendExample('Make a plan for a weekend trip')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.000/svg">
+                                <path d="M8 7H16M8 11H16M12 3V21M3 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Make a plan
+                        </button>
+                        <button class="option-button" onclick="sendExample('Give me more options')">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.000/svg">
+                                <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 8V16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            More
+                        </button>
+                    </div>
+                </div>
+  
+                <div class="messages" id="messages">
+                    </div>
+            </div>
+  
+            <div class="input-area" id="inputArea"> <div class="typing-indicator" id="typingIndicator">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                </div>
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <button class="image-add-button" onclick="showImageUploadAlert()">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 5V19M5 12H19"/>
+                            </svg>
+                        </button>
+                        <textarea   
+                            class="chat-input"   
+                            id="chatInput"   
+                            placeholder="Ask anything" /* Placeholder text as in image */
+                            rows="1"  
+                        ></textarea>  
+                        
+                        <div id="sendMicContainer" style="display: flex; align-items: flex-end;">
+                            <button class="send-button" id="sendButton" disabled>  
+                                <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">  
+                                    <path d="M8 0L16 8L8 16L7.3 15.3L13.6 9H0V7H13.6L7.3 0.7L8 0Z"/>  
+                                </svg>  
+                            </button>
+                            <button class="mic-button" id="micButton"> <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.000/svg">
+                                    <path d="M12 14C14.21 14 16 12.21 16 10V4C16 1.79 14.21 0 12 0C9.79 0 8 1.79 8 4V10C8 12.21 9.79 14 12 14ZM12 16C7.58 16 4 12.42 4 8H2C2 12.84 5.64 16.89 10.31 17.5V21H13.69V21.5C18.36 16.89 22 12.84 22 8H20C20 12.42 16.42 16 12 16Z" fill="currentColor"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // ******************************************************
+        // Firebase Configuration (Aapke project ki details yahan daalein)
+        // Values from your provided screenshots:
+        // ******************************************************
+        const firebaseConfig = {
+            apiKey: "AIzaSyAF4Qn9bgCanYDRVlbi3aKf9wdGTw5nZAw",
+            authDomain: "mychatbusiness-b0e2a.firebaseapp.com",
+            projectId: "mychatbusiness-b0e2a",
+            storageBucket: "mychatbusiness-b0e2a.appspot.com", 
+            messagingSenderId: "200173705074",
+            appId: "1:200173705074:web:74eb4188260d6cfc47efeb",
+            measurementId: "G-MBC0J2YT40" // Agar Analytics nahi chahiye toh is line ko hata sakte ho
+        };
+
+        // Initialize Firebase services
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+        let currentUser = null; // To store the logged-in user object
+        let currentConversationId = null;
+        let unsubscribeFromMessages = null; // To store the Firestore messages listener unsubscribe function
+        let isTyping = false; // Manages typing indicator state and button disable
+        let conversationToDeleteId = null; 
+
+        // Global variable to store all loaded conversations for search
+        let allConversations = []; 
+
+        // AI Assistant ka naam
+        const AI_NAME = "Vaani";
+
+        // DOM Elements for Auth
+        const authSection = document.getElementById('auth-section');
+        const authFormTitle = document.getElementById('auth-form-title');
+        const authEmailInput = document.getElementById('auth-email');
+        const authPasswordInput = document.getElementById('auth-password');
+        const authSubmitButton = document.getElementById('auth-submit-button');
+        const toggleAuthModeButton = document.getElementById('toggle-auth-mode');
+        // NEW: Get reference to the Google Auth Button
+        const googleAuthButton = document.getElementById('google-auth-button'); 
+        const forgotPasswordBtn = document.getElementById('forgot-password-btn');
+        const authFeedback = document.getElementById('auth-feedback');
+        const passwordToggleSpans = document.querySelectorAll('.toggle-password');
+
+        let isLoginMode = true; // true for Login, false for Signup
+
+        // DOM Elements for Chat UI
+        const chatAppContainer = document.getElementById('chat-app-container');
+        const userAvatarSidebar = document.getElementById('user-avatar-sidebar'); // Renamed
+        const userDisplayNameSidebar = document.getElementById('user-display-name-sidebar'); // Renamed
+        const logoutButton = document.getElementById('logout-button');
+        const chatInput = document.getElementById('chatInput');  
+        const sendButton = document.getElementById('sendButton');  
+        const messagesContainer = document.getElementById('messages');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const chatHistoryContainer = document.getElementById('chatHistory');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const deleteConfirmationDialog = document.getElementById('deleteConfirmationDialog');
+        const dialogOverlay = document.getElementById('dialogOverlay');
+        const confirmDeleteYes = document.getElementById('confirmDeleteYes');
+        const confirmDeleteCancel = document.getElementById('confirmDeleteCancel');
+        // REVISED: Get micButton by its new ID
+        const micButton = document.getElementById('micButton'); 
+        const chatContainer = document.getElementById('chatContainer');
+        const chatSearchInput = document.getElementById('chatSearchInput');
+
+        // NEW: Get references for the mobile header user DP display
+        const mobileUserDpDisplay = document.getElementById('mobile-user-dp-display');
+
+        // Reference to the input area element
+        const inputArea = document.getElementById('inputArea');
+
+        // NEW: Reference to the send/mic container
+        const sendMicContainer = document.getElementById('sendMicContainer');
+
+
+        // --- UI Visibility Functions ---
+        function showAuthUI() {
+            authSection.style.display = 'flex';
+            chatAppContainer.style.display = 'none';
+        }
+
+        function showChatUI() {
+            authSection.style.display = 'none';
+            chatAppContainer.style.display = 'flex';
+        }
+
+        // --- Password Visibility Toggle Logic ---
+        passwordToggleSpans.forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const targetId = toggle.dataset.target;
+                const passwordInput = document.getElementById(targetId);
+
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    toggle.textContent = 'Hide';
+                } else {
+                    passwordInput.type = 'password';
+                    toggle.textContent = 'Show';
+                }
+            });
+        });
+
+        // --- Auth Mode Toggle ---
+        toggleAuthModeButton.addEventListener('click', () => {
+            isLoginMode = !isLoginMode;
+            authFormTitle.textContent = isLoginMode ? 'Login' : 'Sign Up';
+            authSubmitButton.textContent = isLoginMode ? 'Login' : 'Sign Up';
+            toggleAuthModeButton.textContent = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Login";
+            authFeedback.textContent = ''; // Clear previous messages
+            forgotPasswordBtn.style.display = isLoginMode ? 'block' : 'none'; // Show/hide forgot password
+            // NEW: Hide Google button in signup mode, or show it only on login mode
+            // You can adjust this logic based on whether you want Google auth on both login/signup forms
+            googleAuthButton.style.display = isLoginMode ? 'flex' : 'flex'; // Keep it visible for both for now
+        });
+
+        // --- Authentication Event Listeners ---
+        authSubmitButton.addEventListener('click', async () => {
+            const email = authEmailInput.value;
+            const password = authPasswordInput.value;
+            authFeedback.textContent = ''; // Clear previous feedback
+
+            if (!email || !password) {
+                authFeedback.textContent = 'Please enter both email and password.';
+                authFeedback.style.color = 'red';
+                return;
+            }
+
+            try {
+                if (isLoginMode) {
+                    await auth.signInWithEmailAndPassword(email, password);
+                    authFeedback.textContent = 'Logged in successfully!';
+                    authFeedback.style.color = 'green';
+                } else {
+                    await auth.createUserWithEmailAndPassword(email, password);
+                    authFeedback.textContent = 'Signed up successfully! You are now logged in.';
+                    authFeedback.style.color = 'green';
+                }
+            } catch (error) {
+                authFeedback.textContent = `Error: ${error.message}`;
+                authFeedback.style.color = 'red';
+                console.error("Auth error:", error);
+            }
+        });
+
+        // NEW: Google Auth Button Listener
+        googleAuthButton.addEventListener('click', async () => { 
+            authFeedback.textContent = ''; 
+            try {
+                await auth.signInWithPopup(googleProvider);
+                authFeedback.textContent = 'Logged in with Google successfully!';
+                authFeedback.style.color = 'green';
+            } catch (error) {
+                authFeedback.textContent = `Google Login Error: ${error.message}`;
+                authFeedback.style.color = 'red';
+                console.error("Google auth error:", error);
+            }
+        });
+
+        forgotPasswordBtn.addEventListener('click', async () => {
+            const email = authEmailInput.value;
+            authFeedback.textContent = ''; // Clear previous feedback
+
+            if (!email) {
+                authFeedback.textContent = 'Please enter your email to reset password.';
+                authFeedback.style.color = 'red';
+                return;
+            }
+
+            try {
+                await auth.sendPasswordResetEmail(email);
+                authFeedback.textContent = `Password reset link sent to ${email}. Check your inbox.`;
+                authFeedback.style.color = 'green';
+            } catch (error) {
+                authFeedback.textContent = `Error sending reset email: ${error.message}`;
+                authFeedback.style.color = 'red';
+                console.error("Password reset error:", error);
+            }
+        });
+
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
+        });
+
+        // --- Authentication State Listener (main app flow controller) ---
+        auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                // User is logged in
+                currentUser = user;
+                // Update sidebar user info
+                userDisplayNameSidebar.textContent = user.displayName || user.email;
+                userAvatarSidebar.textContent = (user.displayName || user.email).charAt(0).toUpperCase();
+                // NEW: Update mobile header user DP
+                mobileUserDpDisplay.textContent = (user.displayName || user.email).charAt(0).toUpperCase(); // Display first char
+                showChatUI();
+                await loadChatHistory(); // Load user's specific chat history
+                // NEW: Ensure padding is correctly set when chat UI is shown
+                adjustMessagesPadding();
+            } else {
+                // User is logged out
+                currentUser = null;
+                showAuthUI();
+                authEmailInput.value = '';
+                authPasswordInput.value = '';
+                authFeedback.textContent = '';
+                // Clear chat UI on logout
+                messagesContainer.innerHTML = '';
+                welcomeScreen.style.display = 'flex';
+                messagesContainer.style.display = 'none';
+                chatHistoryContainer.innerHTML = ''; // Clear sidebar history
+                if (unsubscribeFromMessages) { // Unsubscribe from previous chat listener
+                    unsubscribeFromMessages();
+                    unsubscribeFromMessages = null;
+                }
+                allConversations = []; // Clear stored conversations
+                // NEW: Reset mobile header user DP
+                mobileUserDpDisplay.textContent = 'U'; // Default avatar char
+            }
+        });
+
+        // --- Chat Application Logic (Integrated with Firestore) ---
+
+        // AI Response Logic (Simulated)
+        const aiResponses = {
+            greetings: [
+                `Hello! I'm ${AI_NAME}, your AI assistant. What can I help you with today?`,
+                `Hi there! I'm ${AI_NAME}, here to help you with any questions or tasks you have.`,
+                `Hey! Nice to meet you. I'm ${AI_NAME}. How can I assist you today?`,
+                `Greetings! I'm ${AI_NAME}, your friendly AI assistant, ready to help!`
+            ],
+            howAreYou: [
+                "I'm doing great, thank you for asking! I'm here and ready to help you with anything you need.",
+                "I'm excellent! As an AI, I'm always energized and ready to assist. How are you doing?",
+                "I'm wonderful! I love helping people and learning new things. How can I help you today?",
+                "I'm fantastic! Each conversation is exciting for me. What would you like to know or discuss?"
+            ],
+            worldKnowledge: {
+                india: "India is a diverse South Asian country with over 1.4 billion people. It's known for its rich culture, ancient history, delicious cuisine, and landmarks like the Taj Mahal. India has 28 states, hundreds of languages, and is famous for Bollywood, spices, and yoga.",
+                pakistan: "Pakistan is a country in South Asia, created in 1947. It's known for its beautiful mountains like K2, rich history, and warm hospitality. The capital is Islamabad, and major cities include Karachi and Lahore.",
+                usa: "The United States is a large North American country with 50 states. It's known for innovation, Hollywood, diverse landscapes from beaches to mountains, and cities like New York and Los Angeles.",
+                china: "China is the world's most populous country with a rich 5000-year history. It's known for the Great Wall, ancient philosophy, delicious cuisine, and rapid modern development.",
+                japan: "Japan is an island nation in East Asia, famous for its unique culture, advanced technology, anime, sushi, cherry blossoms, and the perfect blend of traditional and modern life.",
+                france: "France is a European country known for its art, fashion, cuisine, and landmarks like the Eiffel Palace. Paris is called the 'City of Light' and France is famous for wine and cheese.",
+                earth: "Earth is our beautiful blue planet, the third from the Sun. It's the only known planet with life, has 71% water coverage, and is home to millions of species including us humans!",
+                sun: "The Sun is a massive star at the center of our solar system. It's about 4.6 billion years old, provides light and heat to Earth, and is so big that about 1.3 million Earths could fit inside it!"
+            },
+            simulatedTasks: {
+                createImage: "Understood! To create an image, I would need more details. What kind of image are you looking for? (e.g., 'a serene forest', 'a futuristic city at night')",
+                analyzeData: "Okay, I can help analyze data. Please provide the dataset or describe its structure and what insights you're looking for.",
+                makePlan: "Certainly! To make a plan, I need some information. What kind of plan is this for? (e.g., 'a weekend trip to the mountains', 'a study schedule for exams')",
+                moreOptions: "You're looking for more options? I can assist with writing, coding, brainstorming ideas, summarizing texts, learning new concepts, and much more! What's on your mind?",
+                getPlusMessage: "Thank you for your interest in Get Plus! This is a simulated environment, but in a real application, 'Get Plus' would likely unlock advanced features like higher message limits, faster response times, or access to exclusive models.",
+                default: [
+                    "That's interesting! I'd be happy to help you with that. Could you tell me more about what you're looking for?",
+                    "I understand. Let me help you with that. What specific information you need?",
+                    "Great question! I'm here to assist you. Can you provide more details about what you'd like to know?",
+                    "I'm here to help! Could you elaborate on what you're asking about?",
+                    "That's a good question. I'd love to help you find the answer. Can you give me more context?"
+                ]
+            }
+        };
+
+        // --- DOMContentLoaded for initial setup ---
+        document.addEventListener('DOMContentLoaded', function() {  
+            chatInput.addEventListener('input', handleInputChange);  
+            chatInput.addEventListener('keydown', function(e) {  
+                if (e.key === 'Enter' && !e.shiftKey) {  
+                    e.preventDefault();  
+                    if (!sendButton.disabled) {  
+                        sendMessage();  
+                    }  
+                }  
+            });  
+  
+            // Auto-resize textarea  
+            chatInput.addEventListener('input', function() {  
+                this.style.height = 'auto';  
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';  
+                adjustTypingIndicatorPosition(); // Adjust position on input resize
+                adjustMessagesPadding(); // NEW: Adjust messages padding on input resize
+            });  
+  
+            handleInputChange(); // Ensure initial button state is correct
+            sidebarOverlay.addEventListener('click', closeSidebar);
+            confirmDeleteYes.addEventListener('click', () => {
+                deleteConversation(conversationToDeleteId);
+                hideConfirmationDialog();
+            });
+            confirmDeleteCancel.addEventListener('click', hideConfirmationDialog);
+            dialogOverlay.addEventListener('click', hideConfirmationDialog);
+
+            sendButton.addEventListener('click', sendMessage); // Attach sendMessage to button click
+
+            // NEW: Add event listener for chat search input
+            chatSearchInput.addEventListener('input', filterChatHistory);
+
+            // --- Mobile Viewport Height Fix (Reliable for keyboard) ---
+            // Set initial --app-height
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+            
+            // Listen for window resize (keyboard show/hide) and update --app-height
+            window.addEventListener('resize', () => {
+                document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+                // Scroll to bottom after resize to ensure input is visible
+                requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+                adjustTypingIndicatorPosition(); // Adjust position on window resize
+                adjustMessagesPadding(); // NEW: Adjust messages padding on window resize
+            });
+
+            // Call it initially
+            adjustTypingIndicatorPosition();
+            adjustMessagesPadding(); // NEW: Initial call for messages padding
+
+        });  
+  
+        function handleInputChange() {  
+            // REVISED: Logic to show/hide send/mic buttons
+            const hasText = chatInput.value.trim() !== '';
+            sendButton.disabled = !hasText || isTyping; // Disable send if no text or typing
+            
+            if (hasText) {
+                sendButton.style.display = 'flex';
+                micButton.style.display = 'none';
+            } else {
+                sendButton.style.display = 'none';
+                micButton.style.display = 'flex';
+            }
+        }  
+  
+        function sendExample(text) {  
+            chatInput.value = text;  
+            handleInputChange();  
+            sendMessage();  
+        }  
+
+        function showImageUploadAlert() {
+            alert('Image upload functionality would be implemented here! (Requires backend)');
+        }
+  
+        function getAIResponse(userMessage) {
+            const message = userMessage.toLowerCase().trim();
+            
+            if (message.includes('create image')) {
+                return aiResponses.simulatedTasks.createImage;
+            }
+            if (message.includes('analyze data')) {
+                return aiResponses.simulatedTasks.analyzeData;
+            }
+            if (message.includes('make a plan')) {
+                return aiResponses.simulatedTasks.makePlan;
+            }
+            if (message.includes('more options') || message.includes('give me more options')) {
+                return aiResponses.simulatedTasks.moreOptions;
+            }
+
+            // Updated greeting logic to include misspellings
+            if (message.includes('hello') || message.includes('hi') || message.includes('hey') || 
+                message.includes('helo') || message.includes('hllo') || message === 'hlo') { // Added 'hlo'
+                return aiResponses.greetings[Math.floor(Math.random() * aiResponses.greetings.length)];
+            }
+            
+            if (message.includes('how are you') || message.includes('how r u') || 
+                message.includes('kaise ho') || message.includes('kya hal hai')) {
+                return aiResponses.howAreYou[Math.floor(Math.random() * aiResponses.howAreYou.length)];
+            }
+
+            // AI Name related questions
+            if (message.includes('what is your name') || message.includes('who are you') || 
+                message.includes('tumhara naam kya hai') || message.includes('your name') || 
+                message.includes('who are you')) {
+                return `I'm ${AI_NAME}! I'm here to help you with questions, provide information, and have friendly conversations. What would you like to know?`;
+            }
+            
+            if (message.includes('india') || message.includes('bharat')) {
+                return aiResponses.worldKnowledge.india;
+            }
+            if (message.includes('pakistan')) {
+                return aiResponses.worldKnowledge.pakistan;
+            }
+            if (message.includes('usa') || message.includes('america') || message.includes('united states')) {
+                return aiResponses.worldKnowledge.usa;
+            }
+            if (message.includes('china')) {
+                return aiResponses.worldKnowledge.china;
+            }
+            if (message.includes('japan')) {
+                return aiResponses.worldKnowledge.japan;
+            }
+            if (message.includes('france')) {
+                return aiResponses.worldKnowledge.france;
+            }
+            if (message.includes('earth') || message.includes('planet')) {
+                return aiResponses.worldKnowledge.earth;
+            }
+            if (message.includes('sun')) {
+                return aiResponses.worldKnowledge.sun;
+            }
+            
+            if (message.includes('thank') || message.includes('thanks') || message.includes('dhanyawad')) {
+                return "You're very welcome! I'm always happy to help. Is there anything else you'd like to know?";
+            }
+            
+            if (message.includes('time') || message.includes('clock') || message.includes('kitna baje')) {
+                const now = new Date();
+                return `The current time is ${now.toLocaleTimeString('en-IN', {hour: '2-digit', minute:'2-digit', second:'2-digit', hour12: true})}. Is there anything else I can help you with?`;
+            }
+            
+            if (message.includes('date') || message.includes('today') || message.includes('aaj kya date')) {
+                const today = new Date();
+                return `Today is ${today.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}. How can I help you today?`;
+            }
+            
+            if (message.includes('weather') || message.includes('mausam')) {
+                return "I don't have access to real-time weather data, but I'd recommend checking your local weather app or website for the most accurate forecast. Is there anything else I can help you with?";
+            }
+            
+            // Basic Calculator
+            if (message.match(/\b(\d+(\.\d+)?)\s*([+\-*/])\s*(\d+(\.\d+)?)\b/)) {
+                try {
+                    const expression = message.replace(/[^0-9+\-*/.() ]/g, ''); // Sanitize input
+                    const result = eval(expression); // Be cautious with eval in production
+                    if (!isNaN(result)) {
+                        return `The answer is: ${result}. Need help with any other calculations?`;
+                    }
+                } catch (e) {
+                    return "I can help with simple math! Try asking something like '5 + 3' or '10 * 2'. What would you like to calculate?";
+                }
+            }
+            
+            return aiResponses.simulatedTasks.default[Math.floor(Math.random() * aiResponses.simulatedTasks.default.length)];
+        }
+  
+        async function sendMessage() {  
+            if (!currentUser) {
+                alert("Please log in to send messages.");
+                return;
+            }
+
+            const userMessage = chatInput.value.trim();
+            if (!userMessage || isTyping) return;  
+  
+            chatInput.value = '';  
+            chatInput.style.height = 'auto';  
+            handleInputChange(); // Update state after clearing input (disables send button if empty)
+  
+            // If it's a new chat or no conversation selected, create one
+            if (!currentConversationId) {  
+                await startNewChat(false); // Create a new chat for this message
+            }  
+            
+            // Fix 2: Show typing indicator immediately *before* sending message and *before* async operations
+            showTypingIndicator();  
+            // Ensure typing indicator position is correct after showing
+            // A slight delay might be needed if CSS transitions cause height changes
+            setTimeout(adjustTypingIndicatorPosition, 50); 
+            // NEW: Adjust padding before sending message to ensure scroll works correctly
+            adjustMessagesPadding(); 
+            // Scroll immediately after sending user message
+            requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+
+
+            try {
+                // Add user message to Firestore
+                await db.collection(`users/${currentUser.uid}/conversations/${currentConversationId}/messages`).add({
+                    text: userMessage,
+                    senderId: currentUser.uid, // User's UID
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    role: 'user'
+                });
+                console.log("User message successfully sent to Firestore!");
+
+                // Simulate AI response delay
+                setTimeout(async () => {  
+                    const aiResponse = getAIResponse(userMessage); // Generate simulated AI response
+                    
+                    // Add AI response to Firestore
+                    await db.collection(`users/${currentUser.uid}/conversations/${currentConversationId}/messages`).add({
+                        text: aiResponse,
+                        senderId: "AI", // Identifier for AI
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                        role: 'assistant'
+                    });
+                    console.log("AI Response successfully sent to Firestore!");
+                    
+                    hideTypingIndicator();  
+                    updateConversationTitle(currentConversationId, userMessage); // Update title based on first user message
+                }, 800 + Math.random() * 1000); // Simulate AI typing delay  
+
+            } catch (error) {
+                console.error("Error sending message to Firestore: ", error);
+                alert("Error sending message. Please try again.");
+                hideTypingIndicator(); // Ensure indicator is hidden even on error
+            }
+        }  
+  
+        function addMessageToUI(role, content) {  
+            // Hide welcome screen and show messages if not already hidden  
+            if (welcomeScreen.style.display !== 'none') {  
+                welcomeScreen.style.display = 'none';  
+                messagesContainer.style.display = 'block';  
+            }  
+  
+            const messageDiv = document.createElement('div');  
+            messageDiv.className = `message ${role}`;  
+              
+            // Use AI_NAME for assistant avatar or user's initial
+            const avatarChar = role === 'user' ? (currentUser.displayName || currentUser.email).charAt(0).toUpperCase() : 'AI';  
+              
+            messageDiv.innerHTML = `  
+                <div class="message-avatar">${avatarChar}</div>  
+                <div class="message-content">${content}</div>  
+            `;  
+              
+            messagesContainer.appendChild(messageDiv);  
+            // Request animation frame for smooth scrolling after DOM update
+            requestAnimationFrame(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;  
+            });
+        }  
+  
+        function showTypingIndicator() {  
+            isTyping = true;  
+            typingIndicator.style.display = 'flex'; 
+            sendButton.disabled = true; // Disable send button when AI is typing
+            micButton.style.display = 'none'; // Hide mic button when AI is typing
+            // Scroll to bottom immediately
+            requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+        }  
+  
+        function hideTypingIndicator() {  
+            isTyping = false;  
+            typingIndicator.style.display = 'none';  
+            handleInputChange(); // Re-evaluate send/mic button display based on input content
+            // Scroll to bottom immediately
+            requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+        }  
+
+        function adjustTypingIndicatorPosition() {
+            // Get the current height of the input-area element
+            // Use getBoundingClientRect().height for more accurate rendered height
+            const inputAreaHeight = inputArea.getBoundingClientRect().height;
+            
+            // Set the bottom position of the typing indicator
+            // Add a small buffer (e.g., 10px) to place it just above the input area
+            typingIndicator.style.bottom = `${inputAreaHeight + 10}px`; 
+            
+            // Ensure messages container scrolls to the bottom after adjustment
+            requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+        }
+
+        // NEW: Function to dynamically adjust padding-bottom of messages container
+        function adjustMessagesPadding() {
+            const inputAreaHeight = inputArea.getBoundingClientRect().height;
+            // Add a little extra buffer (e.g., 10px) so content isn't right against the input
+            messagesContainer.style.paddingBottom = `${inputAreaHeight + 10}px`; 
+            // Ensure scroll to bottom after padding adjustment
+            requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+        }
+
+
+        // --- Conversation Management (Firestore based) ---
+        async function startNewChat(addWelcome = true) {  
+            if (!currentUser) return; // Must be logged in to create a new chat
+
+            try {
+                const newChatRef = await db.collection(`users/${currentUser.uid}/conversations`).add({
+                    title: 'New chat',        // Default title
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    userId: currentUser.uid
+                });
+                currentConversationId = newChatRef.id;
+                console.log("New chat created with ID:", currentConversationId);
+
+                // Clear UI and show welcome screen
+                messagesContainer.innerHTML = '';  
+                messagesContainer.style.display = 'none';  
+                welcomeScreen.style.display = 'flex';  
+                
+                chatInput.value = ''; // Clear input on new chat
+                chatInput.style.height = 'auto';
+                handleInputChange(); // Update button states (send will be disabled)
+                adjustMessagesPadding(); // NEW: Adjust padding on new chat
+
+                // Re-start listener for the new conversation
+                startMessagesListener(currentConversationId); 
+                await loadChatHistory(); // Reload sidebar history to show new chat
+                closeSidebar(); // Ensure sidebar is closed on mobile
+            } catch (error) {
+                console.error("Error creating new chat:", error);
+                alert("Could not start new chat. Please try again.");
+            }
+        }  
+
+        async function loadConversation(id) {  
+            if (!currentUser) return;
+            if (currentConversationId === id) { // Already on this conversation
+                closeSidebar(); 
+                return;
+            }
+
+            // Unsubscribe from previous chat's messages listener
+            if (unsubscribeFromMessages) {
+                unsubscribeFromMessages();
+                unsubscribeFromMessages = null;
+            }
+
+            currentConversationId = id;  
+              
+            // Clear current messages in UI  
+            messagesContainer.innerHTML = '';  
+            messagesContainer.style.display = 'none';  
+            welcomeScreen.style.display = 'flex';  
+
+            chatInput.value = ''; // Clear input
+            chatInput.style.height = 'auto';
+            handleInputChange();
+            adjustMessagesPadding(); // NEW: Adjust padding on conversation load
+
+            // Start new listener for this conversation's messages
+            startMessagesListener(id);
+            updateChatHistoryUI(); // Update active state in sidebar
+            closeSidebar(); // Close sidebar on mobile after loading a chat
+        }  
+
+        let currentMessagesListenerRef = null; // To hold the listener for Firestore messages
+
+        function startMessagesListener(conversationId) {
+            if (!currentUser || !conversationId) {
+                console.warn("Cannot start messages listener: User not logged in or conversation ID missing.");
+                return;
+            }
+
+            // If a listener is already active, unsubscribe it first
+            if (unsubscribeFromMessages) {
+                unsubscribeFromMessages();
+                console.log("Unsubscribed from previous messages listener.");
+            }
+
+            messagesContainer.innerHTML = ''; // Clear messages whenever we start a new listener
+
+            const messagesRef = db.collection(`users/${currentUser.uid}/conversations/${conversationId}/messages`);
+            const q = messagesRef.orderBy("timestamp", "asc");
+
+            // Fix 1: Firestore `onSnapshot` listener automatically handles new messages.
+            // By clearing `messagesContainer.innerHTML = '';` and then re-adding *all* docs from `snapshot.docs`,
+            // we ensure the UI accurately reflects the current state without blinking.
+            unsubscribeFromMessages = q.onSnapshot(snapshot => {
+                messagesContainer.innerHTML = ''; // Clear existing messages
+                
+                snapshot.docs.forEach(doc => {
+                    const messageData = doc.data();
+                    addMessageToUI(messageData.role, messageData.text);
+                });
+                
+                // After processing all changes, ensure UI is correct
+                if (snapshot.size > 0) {
+                    welcomeScreen.style.display = 'none';
+                    messagesContainer.style.display = 'block';
+                } else if (messagesContainer.children.length === 0) {
+                    // If no messages in the conversation, show welcome screen
+                    welcomeScreen.style.display = 'flex';
+                    messagesContainer.style.display = 'none';
+                }
+                // Ensure scroll to bottom after all messages are added
+                requestAnimationFrame(() => messagesContainer.scrollTop = messagesContainer.scrollHeight);
+            }, error => {
+                console.error("Error listening to messages:", error);
+                if (error.code === 'permission-denied') {
+                    alert('Permission denied to access messages. Check Firestore Rules.');
+                }
+            });
+            console.log(`Started messages listener for conversation ID: ${conversationId}`);
+        }
+
+
+        async function loadChatHistory() {
+            if (!currentUser) {
+                chatHistoryContainer.innerHTML = '';
+                allConversations = []; // Clear stored conversations
+                return;
+            }
+
+            try {
+                const conversationsSnapshot = await db.collection(`users/${currentUser.uid}/conversations`)
+                                                      .orderBy('lastUpdated', 'desc')
+                                                      .get();
+                allConversations = []; // Reset global array
+                conversationsSnapshot.forEach(doc => {
+                    allConversations.push({ id: doc.id, ...doc.data() });
+                });
+
+                if (allConversations.length > 0) {
+                    // If currentConversationId is not set or doesn't exist anymore, set to the first one
+                    // Also check if the currentConversationId is actually in the loaded list
+                    if (!currentConversationId || !allConversations.some(c => c.id === currentConversationId)) {
+                        currentConversationId = allConversations[0].id;
+                    }
+                    // Start listener for messages of the active conversation
+                    startMessagesListener(currentConversationId);
+                } else {
+                    // No conversations exist, start a brand new one after user logs in for the first time
+                    currentConversationId = null; // Ensure no old ID is used
+                    await startNewChat(true); 
+                }
+                updateChatHistoryUI(); // Update the UI of the sidebar
+            } catch (error) {
+                console.error("Error loading chat history:", error);
+                // alert("Could not load chat history. Please try again."); // Removed this general alert for less obtrusiveness
+            }
+        }
+        
+        function updateChatHistoryUI() {  
+            chatHistoryContainer.innerHTML = '';  
+            
+            // Filter conversations based on search input
+            const searchTerm = chatSearchInput.value.toLowerCase();
+            const filteredConversations = allConversations.filter(conv => 
+                conv.title.toLowerCase().includes(searchTerm)
+            );
+
+            filteredConversations.forEach(conversation => {  
+                const chatItem = document.createElement('div');  
+                chatItem.className = `chat-item ${conversation.id === currentConversationId ? 'active' : ''}`;  
+                chatItem.dataset.id = conversation.id; // Store ID on the element
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'chat-item-title';
+                titleSpan.textContent = conversation.title;
+                titleSpan.onclick = (e) => { // Load conversation on title click
+                    e.stopPropagation(); 
+                    loadConversation(conversation.id);
+                };
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'chat-item-actions';
+
+                // Edit Button
+                const editButton = document.createElement('button');
+                editButton.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                `;
+                editButton.onclick = (e) => {
+                    e.stopPropagation(); // Prevent loading chat
+                    startEditTitle(conversation.id, titleSpan);
+                };
+
+                // Delete Button
+                const deleteButton = document.createElement('button');
+                deleteButton.innerHTML = `
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.000/svg">
+                        <path d="M3 6H21M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6M10 11V16M14 11V16M19 6V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                `;
+                deleteButton.onclick = (e) => {
+                    e.stopPropagation(); // Prevent loading chat
+                    showConfirmationDialog(conversation.id);
+                };
+
+                actionsDiv.appendChild(editButton);
+                actionsDiv.appendChild(deleteButton);
+
+                chatItem.appendChild(titleSpan);
+                chatItem.appendChild(actionsDiv);
+                
+                chatHistoryContainer.appendChild(chatItem);  
+            });  
+        }  
+
+        async function startEditTitle(id, titleElement) {
+            const conversation = allConversations.find(c => c.id === id); // Use allConversations
+            if (!conversation) return;
+
+            const chatItemDiv = titleElement.closest('.chat-item');
+            if (!chatItemDiv) return;
+
+            titleElement.style.display = 'none';
+            chatItemDiv.querySelector('.chat-item-actions').style.display = 'none';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'chat-item-edit-input';
+            input.value = conversation.title;
+            input.style.display = 'block';
+
+            chatItemDiv.appendChild(input);
+            input.focus();
+            input.select();
+
+            const finishEdit = async () => {
+                const newTitle = input.value.trim();
+                if (newTitle && newTitle !== conversation.title) {
+                    try {
+                        await db.collection(`users/${currentUser.uid}/conversations`).doc(id).update({
+                            title: newTitle,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        console.log("Conversation title updated successfully!");
+                        await loadChatHistory(); // Reload history to update UI
+                    } catch (error) {
+                        console.error("Error updating conversation title:", error);
+                        alert("Could not update chat title.");
+                    }
+                } else {
+                    titleElement.style.display = 'block';
+                    // Re-show actions based on whether it's desktop or hovered on mobile
+                    if (window.innerWidth >= 769 || chatItemDiv.matches(':hover')) {
+                        chatItemDiv.querySelector('.chat-item-actions').style.display = 'flex';
+                    }
+                }
+                if (chatItemDiv.contains(input)) { // Check if input is still a child
+                    chatItemDiv.removeChild(input);
+                }
+            };
+
+            input.addEventListener('blur', finishEdit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    input.value = conversation.title;
+                    input.blur();
+                }
+            });
+        }
+
+        function showConfirmationDialog(id) {
+            conversationToDeleteId = id;
+            deleteConfirmationDialog.style.display = 'block';
+            dialogOverlay.classList.add('active');
+        }
+
+        function hideConfirmationDialog() {
+            deleteConfirmationDialog.style.display = 'none';
+            dialogOverlay.classList.remove('active');
+            conversationToDeleteId = null;
+        }
+
+        async function deleteConversation(id) {
+            if (!currentUser) return;
+            try {
+                // Delete all messages in the subcollection first
+                const messagesSnapshot = await db.collection(`users/${currentUser.uid}/conversations/${id}/messages`).get();
+                const batch = db.batch();
+                messagesSnapshot.forEach((doc) => {
+                    batch.delete(doc.ref);
+                });
+                await batch.commit();
+                console.log("All messages deleted for conversation:", id);
+
+                // Then delete the conversation document itself
+                await db.collection(`users/${currentUser.uid}/conversations`).doc(id).delete();
+                console.log("Conversation deleted:", id);
+
+                // If deleted conversation was active, switch to a new chat or first available
+                if (currentConversationId === id) {
+                    currentConversationId = null; // Clear active conversation
+                    if (unsubscribeFromMessages) { // Unsubscribe from deleted chat's listener
+                        unsubscribeFromMessages();
+                        unsubscribeFromMessages = null;
+                    }
+                    await loadChatHistory(); // Reloads history and sets a new currentConversationId or starts new chat
+                } else {
+                    await loadChatHistory(); // Just reload history to update sidebar
+                }
+            } catch (error) {
+                console.error("Error deleting conversation:", error);
+                alert("Could not delete chat. Please try again.");
+            }
+        }
+        
+        // Update conversation title in Firestore based on the first user message
+        async function updateConversationTitle(conversationId, firstUserMessage) {
+            if (!currentUser || !conversationId) return;
+
+            const conversationRef = db.collection(`users/${currentUser.uid}/conversations`).doc(conversationId);
+            const conversationDoc = await conversationRef.get();
+
+            if (conversationDoc.exists && conversationDoc.data().title === 'New chat') {
+                const newTitle = firstUserMessage.length > 30 ? firstUserMessage.substring(0, 30) + '...' : firstUserMessage;
+                try {
+                    await conversationRef.update({
+                        title: newTitle,
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    console.log("Conversation title updated to:", newTitle);
+                    await loadChatHistory(); // Refresh sidebar
+                } catch (error) {
+                    console.error("Error updating conversation title:", error);
+                }
+            } else {
+                // If title already changed or not 'New chat', just update lastUpdated
+                 try {
+                    await conversationRef.update({
+                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                } catch (error) {
+                    console.error("Error updating conversation lastUpdated:", error);
+                }
+            }
+        }
+
+
+        // Sidebar Toggle for Mobile
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('active');
+        }
+
+        function closeSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.remove('open');
+            overlay.classList.remove('active');
+        }
+
+        function showGetPlusMessage() {
+            alert(aiResponses.simulatedTasks.getPlusMessage);
+        }
+
+        // NEW: Function to filter chat history based on search input
+        function filterChatHistory() {
+            updateChatHistoryUI(); // Re-render the history with the current filter
+        }
+
+        // NEW: Function to show user information (simulated with an alert)
+        function showUserInfo() {
+            if (currentUser) {
+                let userInfo = `User Profile:\n`;
+                userInfo += `Name: ${currentUser.displayName || 'Not set'}\n`;
+                userInfo += `Email: ${currentUser.email}\n`;
+                userInfo += `UID: ${currentUser.uid}\n`;
+                userInfo += `Provider: ${currentUser.providerData[0].providerId}\n`;
+                // Add more info as needed
+                alert(userInfo);
+            } else {
+                alert("You are not logged in.");
+            }
+        }
+
+    </script>
+</body>
+</html>
